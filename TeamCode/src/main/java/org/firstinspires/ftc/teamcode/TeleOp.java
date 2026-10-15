@@ -4,23 +4,34 @@ import com.pedropathing.api.PoseFactory;
 import com.pedropathing.localization.Localizer;
 import com.pedropathing.math.Pose;
 import com.pedropathing.revhub.localizers.PinpointLocalizer;
+import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.IMU;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
+import com.qualcomm.robotcore.hardware.Servo;
 
 @com.qualcomm.robotcore.eventloop.opmode.TeleOp
 public class TeleOp extends LinearOpMode {
-
     DcMotor frontLeftMotor;
     DcMotor frontRightMotor;
     DcMotor rearLeftMotor;
     DcMotor rearRightMotor;
+    DcMotor intake;
+
+    DcMotor pollenTurretFlywheel;
+    Servo pollenTurretHood;
     GoBildaPinpointDriver pinpoint;
+    boolean intakeOn;
+    boolean pollenLauncherOn;
+    double intakeSpeed = 1;
+    double driveSpeed = 1;
+    Limelight3A limelight;
 
     @Override
     public void runOpMode(){
@@ -30,15 +41,55 @@ public class TeleOp extends LinearOpMode {
         frontRightMotor = hardwareMap.get(DcMotor.class, "fr_motor");
         rearLeftMotor = hardwareMap.get(DcMotor.class, "rl_motor");
         rearRightMotor = hardwareMap.get(DcMotor.class, "rr_motor");
+        intake = hardwareMap.get(DcMotor.class, "intake_motor");
+        pollenTurretFlywheel = hardwareMap.get(DcMotor.class, "pollen_launcher");
+        pollenTurretHood = hardwareMap.get(Servo.class, "pollen_hood");
+
+        //Initialize pinpoint
+        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
+
+        //Initialize limelight
+        limelight = hardwareMap.get(Limelight3A.class, "limelight");
+        limelight.setPollRateHz(100);
+        limelight.start();
+
+        //Swap limelight to pipeline 0 (Red I believe)
+        limelight.pipelineSwitch(0);
 
         frontRightMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         rearRightMotor.setDirection(DcMotorSimple.Direction.REVERSE);
 
-        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
-
         waitForStart();
+
+        //Predefine pollen hood position
+        pollenTurretHood.setPosition(0.5);
         while(opModeIsActive()){
             pinpoint.update();
+            telemetry.addData("Pinpoint pos: ", pinpoint.getPosition());
+
+            if(gamepad1.aWasPressed()){
+                intakeOn = !intakeOn;
+            }
+            if(gamepad1.bWasPressed()){
+                pollenLauncherOn = !pollenLauncherOn;
+            }
+
+            if(intakeOn){
+                intake.setPower(intakeSpeed);
+            }
+            else{
+                intake.setPower(0);
+            }
+
+
+
+            if(pollenLauncherOn){
+                pollenTurretFlywheel.setPower(-1);
+            }
+            else{
+                pollenTurretFlywheel.setPower(0);
+            }
+
             double heading = pinpoint.getHeading(AngleUnit.RADIANS);
 
             double fr = 0;
@@ -77,10 +128,15 @@ public class TeleOp extends LinearOpMode {
             br /= denominator;
             bl /= denominator;
 
-            frontRightMotor.setPower(fr);
-            frontLeftMotor.setPower(fl);
-            rearRightMotor.setPower(br);
-            rearLeftMotor.setPower(bl);
+            frontRightMotor.setPower(Interpolate(0, driveSpeed, fr));
+            frontLeftMotor.setPower(Interpolate(0, driveSpeed, fl));
+            rearRightMotor.setPower(Interpolate(0, driveSpeed, br));
+            rearLeftMotor.setPower(Interpolate(0, driveSpeed, bl));
+            telemetry.update();
         }
+    }
+
+    public double Interpolate(double min, double max, double in){
+        return min + in * (max - in);
     }
 }
