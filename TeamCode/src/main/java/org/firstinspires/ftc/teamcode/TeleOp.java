@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode;
 
+import static java.sql.Types.NULL;
+
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.localization.Localizer;
 import com.pedropathing.math.Pose;
@@ -58,6 +60,7 @@ public class TeleOp extends LinearOpMode {
         pollenTurretHood = hardwareMap.get(Servo.class, "pollen_hood");
         pollenTurretServo = hardwareMap.get(Servo.class, "pollen_servo");
 
+
         nectarTurretFlywheel = hardwareMap.get(DcMotor.class, "nectar_launcher");
         nectarTurretHood = hardwareMap.get(Servo.class, "nectar_hood");
         nectarTurretServo = hardwareMap.get(Servo.class, "nectar_servo");
@@ -81,26 +84,42 @@ public class TeleOp extends LinearOpMode {
 
         //Predefine pollen hood position
         pollenTurretHood.setPosition(0.5);
+
+
         while(opModeIsActive()){
             pinpoint.update();
 
             LLResult result = limelight.getLatestResult();
-            List<LLResultTypes.FiducialResult> fiducials = result.getFiducialResults();
-            LLResultTypes.FiducialResult closestTag;
-            double closestTagDistance = Double.POSITIVE_INFINITY;
-            telemetry.addLine("Current detected fiducials:");
-            for (LLResultTypes.FiducialResult fiducial : fiducials) {
-                int id = fiducial.getFiducialId(); // The ID number of the fiducial
-                double x = fiducial.getTargetXDegrees(); // Where it is (left-right)
-                double y = fiducial.getTargetYDegrees(); // Where it is (up-down)
 
-                telemetry.addData("Fiducial id: ", id);
-                telemetry.addData("x: ", x);
-                telemetry.addData("y: ", y);
+            if(!limelight.isConnected()){
+                telemetry.addLine("Limelight disconnected. Robot reboot recommended. Check wiring.");
             }
-            if(fiducials.toArray().length == 0){
-                telemetry.addLine("No april tags detected");
+            List<LLResultTypes.FiducialResult> fiducials = result.getFiducialResults();
+            LLResultTypes.FiducialResult closestTag = null;
+            double closestTagDistance = Double.POSITIVE_INFINITY;
+
+            for (LLResultTypes.FiducialResult fiducial : fiducials) {
+                double distance = calculateDistance(fiducial.getRobotPoseTargetSpace().getPosition().x, fiducial.getRobotPoseTargetSpace().getPosition().y, fiducial.getRobotPoseTargetSpace().getPosition().z);
+
+                if(distance < closestTagDistance){
+                    closestTagDistance = distance;
+                    closestTag = fiducial;
+                }
             }
+            if(closestTag == null){
+                telemetry.addLine("No tags detected");
+            }
+            else{
+                telemetry.addData("Targeting tag: ", closestTag.getFiducialId());
+
+                if(closestTag.getRobotPoseTargetSpace().getPosition().x < -1){
+                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() + 0.01d);
+                }
+                else if(closestTag.getRobotPoseTargetSpace().getPosition().x > 1){
+                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() - 0.01d);
+                }
+            }
+
             telemetry.addData("Pinpoint pos: ", pinpoint.getPosition());
 
             if(gamepad1.aWasPressed()){
