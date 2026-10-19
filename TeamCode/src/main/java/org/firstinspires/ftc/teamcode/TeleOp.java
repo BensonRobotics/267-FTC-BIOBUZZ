@@ -40,7 +40,7 @@ public class TeleOp extends LinearOpMode {
     Servo nectarTurretServo;
     GoBildaPinpointDriver pinpoint;
     boolean intakeOn;
-    boolean pollenLauncherOn;
+    boolean launcherOn;
     double intakeSpeed = 1;
     double driveSpeed = 1;
     Limelight3A limelight;
@@ -60,14 +60,12 @@ public class TeleOp extends LinearOpMode {
         pollenTurretHood = hardwareMap.get(Servo.class, "pollen_hood");
         pollenTurretServo = hardwareMap.get(Servo.class, "pollen_servo");
 
-
         nectarTurretFlywheel = hardwareMap.get(DcMotor.class, "nectar_launcher");
         nectarTurretHood = hardwareMap.get(Servo.class, "nectar_hood");
         nectarTurretServo = hardwareMap.get(Servo.class, "nectar_servo");
 
         //Initialize pinpoint
         pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
-
 
         //Initialize limelight
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
@@ -100,7 +98,6 @@ public class TeleOp extends LinearOpMode {
 
             for (LLResultTypes.FiducialResult fiducial : fiducials) {
                 double distance = calculateDistance(fiducial.getRobotPoseTargetSpace().getPosition().x, fiducial.getRobotPoseTargetSpace().getPosition().y, fiducial.getRobotPoseTargetSpace().getPosition().z);
-
                 if(distance < closestTagDistance){
                     closestTagDistance = distance;
                     closestTag = fiducial;
@@ -108,15 +105,18 @@ public class TeleOp extends LinearOpMode {
             }
             if(closestTag == null){
                 telemetry.addLine("No tags detected");
+                pollenTurretServo.setPosition(0.5);
             }
             else{
                 telemetry.addData("Targeting tag: ", closestTag.getFiducialId());
 
-                if(closestTag.getRobotPoseTargetSpace().getPosition().x < -1){
-                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() + 0.01d);
+                if(closestTag.getTargetXDegrees() < -1){
+                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() + 0.1d);
+                    nectarTurretServo.setPosition(nectarTurretServo.getPosition() + 0.1d);
                 }
-                else if(closestTag.getRobotPoseTargetSpace().getPosition().x > 1){
-                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() - 0.01d);
+                else if(closestTag.getTargetXDegrees() > 1){
+                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() - 0.1d);
+                    nectarTurretServo.setPosition(nectarTurretServo.getPosition() - 0.1d);
                 }
             }
 
@@ -126,7 +126,7 @@ public class TeleOp extends LinearOpMode {
                 intakeOn = !intakeOn;
             }
             if(gamepad1.bWasPressed()){
-                pollenLauncherOn = !pollenLauncherOn;
+                launcherOn = !launcherOn;
             }
 
             if(intakeOn){
@@ -135,11 +135,13 @@ public class TeleOp extends LinearOpMode {
             else{
                 intake.setPower(0);
             }
-            if(pollenLauncherOn){
+            if(launcherOn){
                 pollenTurretFlywheel.setPower(-1);
+                nectarTurretFlywheel.setPower(-1);
             }
             else{
                 pollenTurretFlywheel.setPower(0);
+                nectarTurretFlywheel.setPower(0);
             }
 
             double heading = pinpoint.getHeading(AngleUnit.RADIANS);

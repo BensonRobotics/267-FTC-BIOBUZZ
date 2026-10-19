@@ -35,8 +35,8 @@ public class LimelightTest extends LinearOpMode {
                 double distance = calculateDistance(fiducial.getRobotPoseTargetSpace().getPosition().x, fiducial.getRobotPoseTargetSpace().getPosition().y, fiducial.getRobotPoseTargetSpace().getPosition().z);
 
                 telemetry.addData("Fiducial id: ", id);
-                telemetry.addData("x: ", x);
-                telemetry.addData("y: ", y);
+                telemetry.addData("x deg: ", x);
+                telemetry.addData("y deg: ", y);
                 telemetry.addData("distance: ", distance);
             }
             if(fiducials.toArray().length == 0){
@@ -59,9 +59,13 @@ public class LimelightTest extends LinearOpMode {
                         double distance = calculateDistance(fiducial.getRobotPoseTargetSpace().getPosition().x, fiducial.getRobotPoseTargetSpace().getPosition().y, fiducial.getRobotPoseTargetSpace().getPosition().z);
 
                         telemetry.addData("Fiducial id: ", id);
-                        telemetry.addData("x: ", x);
-                        telemetry.addData("y: ", y);
+                        telemetry.addData("x deg: ", x);
+                        telemetry.addData("y deg: ", y);
+                        telemetry.addData("x pos: ", fiducial.getRobotPoseTargetSpace().getPosition().x);
+                        telemetry.addData("y pos: ", fiducial.getRobotPoseTargetSpace().getPosition().y);
+
                         telemetry.addData("distance: ", distance);
+
                     }
                 }
 
