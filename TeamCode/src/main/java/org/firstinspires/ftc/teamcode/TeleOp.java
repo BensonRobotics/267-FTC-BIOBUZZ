@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode;
 
 import static java.sql.Types.NULL;
 
+import com.arcrobotics.ftclib.controller.PIDController;
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.localization.Localizer;
 import com.pedropathing.math.Pose;
@@ -45,9 +46,16 @@ public class TeleOp extends LinearOpMode {
     double driveSpeed = 1;
     Limelight3A limelight;
 
+    final double p = 0.01d;
+    final double i = 0.0d;
+    final double d = 0.001d;
+
+    PIDController pollenPID;
+
     @Override
     public void runOpMode(){
 
+        pollenPID = new PIDController(p, i, d);
         //Initialize motors
         frontLeftMotor = hardwareMap.get(DcMotor.class, "fl_motor");
         frontRightMotor = hardwareMap.get(DcMotor.class, "fr_motor");
@@ -110,14 +118,19 @@ public class TeleOp extends LinearOpMode {
             else{
                 telemetry.addData("Targeting tag: ", closestTag.getFiducialId());
 
-                if(closestTag.getTargetXDegrees() < -1){
-                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() + 0.1d);
-                    nectarTurretServo.setPosition(nectarTurretServo.getPosition() + 0.1d);
-                }
-                else if(closestTag.getTargetXDegrees() > 1){
-                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() - 0.1d);
-                    nectarTurretServo.setPosition(nectarTurretServo.getPosition() - 0.1d);
-                }
+                pollenPID.setSetPoint(0.0);
+                double correction = pollenPID.calculate(closestTag.getTargetXPixels());
+                telemetry.addData("Pollen PID correction: ", correction);
+                pollenTurretServo.setPosition(correction);
+//
+//                if(closestTag.getTargetXDegrees() < -1){
+//                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() + 0.1d);
+//                    nectarTurretServo.setPosition(nectarTurretServo.getPosition() + 0.1d);
+//                }
+//                else if(closestTag.getTargetXDegrees() > 1){
+//                    pollenTurretServo.setPosition(pollenTurretServo.getPosition() - 0.1d);
+//                    nectarTurretServo.setPosition(nectarTurretServo.getPosition() - 0.1d);
+//                }
             }
 
             telemetry.addData("Pinpoint pos: ", pinpoint.getPosition());
