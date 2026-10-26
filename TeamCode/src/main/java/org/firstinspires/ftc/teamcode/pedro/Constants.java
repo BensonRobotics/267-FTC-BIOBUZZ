@@ -22,10 +22,10 @@ public class Constants {
         return new Follower(localizer, new Mecanum(h, drivetrainConfig), new Foresight(foresightConfig));
     }
     public static MecanumConfig drivetrainConfig = new MecanumConfig(c -> {
-        c.frontLeftName.set("fl");
-        c.frontRightName.set("fr");
-        c.backLeftName.set("rl");
-        c.backRightName.set("rr");
+        c.frontLeftName.set("fl_motor");
+        c.frontRightName.set("fr_motor");
+        c.backLeftName.set("rl_motor");
+        c.backRightName.set("rr_motor");
         c.frontLeftDirection.set(DcMotorSimple.Direction.REVERSE);
         c.frontRightDirection.set(DcMotorSimple.Direction.FORWARD);
         c.backLeftDirection.set(DcMotorSimple.Direction.REVERSE);

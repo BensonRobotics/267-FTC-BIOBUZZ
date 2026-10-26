@@ -17,6 +17,7 @@ import com.qualcomm.robotcore.hardware.IMU;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.hardware.Servo;
@@ -24,9 +25,8 @@ import com.seattlesolvers.solverslib.controller.PIDController;
 
 import java.util.List;
 
-@com.qualcomm.robotcore.eventloop.opmode.TeleOp
+@com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "TeleOp", group = "Proto")
 public class TeleOp extends LinearOpMode {
-
     DcMotor frontLeftMotor;
     DcMotor frontRightMotor;
     DcMotor rearLeftMotor;
@@ -36,7 +36,9 @@ public class TeleOp extends LinearOpMode {
 
     DcMotor pollenTurretFlywheel;
     Servo pollenTurretHood;
-    Servo pollenTurretServo;
+    Servo pollenTurretServo1;
+    //Servo pollenTurretServo2;
+    Localizer localizer;
 
     //DcMotor nectarTurretFlywheel;
     //Servo nectarTurretHood;
@@ -44,8 +46,22 @@ public class TeleOp extends LinearOpMode {
     GoBildaPinpointDriver pinpoint;
     boolean intakeOn;
     boolean launcherOn;
+
+    //TODO: tune
     double intakeSpeed = 1;
     double driveSpeed = 1;
+    double feedSpeed = 1;
+
+    //Hood settings
+    double servoHoodDefault = 0.5;
+    double hoodMax = 0.5;
+    double hoodMin = 0;
+
+    //Launcher settings
+    double maxDistance = 1.6;
+    double launcherMinSpeed = -0.8;
+    double launcherMaxSpeed = -0.1;
+
     Limelight3A limelight;
 
     //PID constants
@@ -57,9 +73,12 @@ public class TeleOp extends LinearOpMode {
     //PID controller for pollen
     PIDController pollenPID;
 
+    public Pose2D startingPosition;
 
     @Override
     public void runOpMode(){
+        localizer = new PinpointLocalizer(hardwareMap, Constants.localizerConfig);
+        localizer.setPose(RState.position);
 
         //Initialize pollen PID controller
         pollenPID = new PIDController(p, i, d);
@@ -77,7 +96,8 @@ public class TeleOp extends LinearOpMode {
         //Initialize pollen turret system
         pollenTurretFlywheel = hardwareMap.get(DcMotor.class, "pollen_launcher");
         pollenTurretHood = hardwareMap.get(Servo.class, "pollen_hood");
-        pollenTurretServo = hardwareMap.get(Servo.class, "pollen_servo");
+        pollenTurretServo1 = hardwareMap.get(Servo.class, "pollen_servo");
+        //pollenTurretServo2 = hardwareMap.get(Servo.class, "pollen_servo_2");
 
         //Nectar not used for first version
         //nectarTurretFlywheel = hardwareMap.get(DcMotor.class, "nectar_launcher");
@@ -86,6 +106,8 @@ public class TeleOp extends LinearOpMode {
 
         //Initialize pinpoint
         pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
+
+        pinpoint.setPosition(startingPosition);
 
         //Initialize limelight
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
@@ -106,6 +128,8 @@ public class TeleOp extends LinearOpMode {
             //Update pinpoint odometry
             pinpoint.update();
 
+            localizer.update();
+
             //Fetch limelight
             LLResult result = limelight.getLatestResult();
 
@@ -113,7 +137,6 @@ public class TeleOp extends LinearOpMode {
             if(!limelight.isConnected()){
                 telemetry.addLine("Limelight disconnected. Robot reboot recommended. Check wiring.");
             }
-
 
             List<LLResultTypes.FiducialResult> fiducials = result.getFiducialResults();
 
@@ -135,15 +158,23 @@ public class TeleOp extends LinearOpMode {
                 telemetry.addLine("No tags detected");
 
                 //Return servo hood to midpoint
-                pollenTurretServo.setPosition(0.5);
+                pollenTurretServo1.setPosition(servoHoodDefault);
+                //pollenTurretServo2.setPosition(servoHoodDefault);
             }
             else{
 
                 telemetry.addData("Targeting tag: ", closestTag.getFiducialId());
 
                 //Rough estimates for flywheel power & hood position
-                pollenTurretHood.setPosition(lerp(0, 0.5, 1.6/closestTagDistance));
-                pollenTurretFlywheel.setPower(lerp(-0.8d, -0.1d, 1.6/closestTagDistance));
+                pollenTurretHood.setPosition(lerp(hoodMin, hoodMax, maxDistance/closestTagDistance));
+
+                //Toggle launcher hardware
+                if(launcherOn){
+                    pollenTurretFlywheel.setPower(lerp(launcherMinSpeed, launcherMaxSpeed, maxDistance/closestTagDistance));
+                }
+                else{
+                    pollenTurretFlywheel.setPower(0);
+                }
 
                 //PID input for targeting
                 pollenPID.setSetPoint(0.0);
@@ -151,10 +182,11 @@ public class TeleOp extends LinearOpMode {
 
                 telemetry.addData("Pollen PID correction: ", correction);
 
-                pollenTurretServo.setPosition(correction);
+                pollenTurretServo1.setPosition(correction);
+                //pollenTurretServo2.setPosition(correction);
             }
 
-            telemetry.addData("Pinpoint pos: ", pinpoint.getPosition());
+            telemetry.addData("Pinpoint pos: ", localizer.pose());
 
             //Toggle intake
             if(gamepad1.aWasPressed()){
@@ -167,25 +199,16 @@ public class TeleOp extends LinearOpMode {
             //Enable/Disable intake system
             if(intakeOn){
                 intake.setPower(intakeSpeed);
-                feedMotor.setPower(1);
+                feedMotor.setPower(feedSpeed);
             }
             else{
                 intake.setPower(0);
                 feedMotor.setPower(0);
             }
 
-            //Enable/Disable launcher system
-            if(launcherOn){
-                pollenTurretFlywheel.setPower(-1);
-                //nectarTurretFlywheel.setPower(-1);
-            }
-            else{
-                pollenTurretFlywheel.setPower(0);
-                //nectarTurretFlywheel.setPower(0);
-            }
-
             //Some really cool movement code I stole from bartholomew
-            double heading = pinpoint.getHeading(AngleUnit.RADIANS);
+            //double heading = pinpoint.getHeading(AngleUnit.RADIANS);
+            double heading = localizer.pose().heading();
 
             double fr = 0;
             double fl = 0;
@@ -223,12 +246,11 @@ public class TeleOp extends LinearOpMode {
             br /= denominator;
             bl /= denominator;
 
-            frontRightMotor.setPower(Interpolate(0, driveSpeed, fr));
-            frontLeftMotor.setPower(Interpolate(0, driveSpeed, fl));
-            rearRightMotor.setPower(Interpolate(0, driveSpeed, br));
-            rearLeftMotor.setPower(Interpolate(0, driveSpeed, bl));
+            frontRightMotor.setPower(fr);
+            frontLeftMotor.setPower(fl);
+            rearRightMotor.setPower(br);
+            rearLeftMotor.setPower(bl);
             telemetry.update();
-
         }
     }
 

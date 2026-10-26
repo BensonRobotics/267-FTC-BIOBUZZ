@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode;
+package org.firstinspires.ftc.teamcode.tests;
 import com.pedropathing.api.Paths;
 import com.pedropathing.follower.Follower;
 
@@ -81,7 +81,6 @@ public class OdometryTest extends OpMode {
         if(follower.completion() == 1 && currentPath < paths.toArray().length){
             currentPath++;
             schedule(follow(follower, paths.get(currentPath)));
-
         }
     }
 
