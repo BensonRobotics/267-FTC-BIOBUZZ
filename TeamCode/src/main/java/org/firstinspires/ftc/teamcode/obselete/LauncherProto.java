@@ -1,6 +1,6 @@
-package org.firstinspires.ftc.teamcode;
+package org.firstinspires.ftc.teamcode.obselete;
 
-import static org.firstinspires.ftc.teamcode.TeleOp.calculateDistance;
+import static org.firstinspires.ftc.teamcode.comp_opmodes.TeleOp.calculateDistance;
 
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
@@ -12,6 +12,7 @@ import com.qualcomm.robotcore.hardware.Servo;
 
 import java.util.List;
 
+@Deprecated
 @TeleOp
 public class LauncherProto extends LinearOpMode {
     public DcMotorEx launchMotor;

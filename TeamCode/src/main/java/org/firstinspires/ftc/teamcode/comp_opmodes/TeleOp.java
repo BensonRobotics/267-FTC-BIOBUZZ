@@ -1,25 +1,20 @@
-package org.firstinspires.ftc.teamcode;
+package org.firstinspires.ftc.teamcode.comp_opmodes;
 
-import static org.firstinspires.ftc.teamcode.LauncherProto.lerp;
-import static java.sql.Types.NULL;
+import static org.firstinspires.ftc.teamcode.obselete.LauncherProto.lerp;
 
-import com.pedropathing.api.PoseFactory;
 import com.pedropathing.localization.Localizer;
-import com.pedropathing.math.Pose;
 import com.pedropathing.revhub.localizers.PinpointLocalizer;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.IMU;
 
-import org.firstinspires.ftc.robotcore.external.Telemetry;
-import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
+import org.firstinspires.ftc.teamcode.util.RState;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.seattlesolvers.solverslib.controller.PIDController;
 
@@ -34,9 +29,9 @@ public class TeleOp extends LinearOpMode {
     DcMotor intake;
     DcMotor feedMotor;
 
-    DcMotor pollenTurretFlywheel;
+    DcMotorEx pollenTurretFlywheel;
+    DcMotorEx pollenTurretDrive;
     Servo pollenTurretHood;
-    Servo pollenTurretServo1;
     //Servo pollenTurretServo2;
     Localizer localizer;
 
@@ -59,8 +54,13 @@ public class TeleOp extends LinearOpMode {
 
     //Launcher settings
     double maxDistance = 1.6;
-    double launcherMinSpeed = -0.8;
-    double launcherMaxSpeed = -0.1;
+
+    //Speeds are in TPM (Ticks Per Minute) counts
+    double launcherMinSpeed = -2800;
+    double launcherMaxSpeed = -1000;
+
+    double launcherVelocityTolerance = 100;
+    double launcherVelocityTarget = 0;
 
     Limelight3A limelight;
 
@@ -94,19 +94,21 @@ public class TeleOp extends LinearOpMode {
         feedMotor = hardwareMap.get(DcMotor.class, "feed_motor");
 
         //Initialize pollen turret system
-        pollenTurretFlywheel = hardwareMap.get(DcMotor.class, "pollen_launcher");
+        pollenTurretFlywheel = hardwareMap.get(DcMotorEx.class, "pollen_launcher");
         pollenTurretHood = hardwareMap.get(Servo.class, "pollen_hood");
-        pollenTurretServo1 = hardwareMap.get(Servo.class, "pollen_servo");
-        //pollenTurretServo2 = hardwareMap.get(Servo.class, "pollen_servo_2");
+        pollenTurretDrive = hardwareMap.get(DcMotorEx.class, "pollen_turret_drive");
 
-        //Nectar not used for first version
+        //Reset pollen turret drive motor encoder
+        pollenTurretDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        pollenTurretDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+
+        //Nectar not used for lm1
         //nectarTurretFlywheel = hardwareMap.get(DcMotor.class, "nectar_launcher");
         //nectarTurretHood = hardwareMap.get(Servo.class, "nectar_hood");
         //nectarTurretServo = hardwareMap.get(Servo.class, "nectar_servo");
 
         //Initialize pinpoint
         pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
-
         pinpoint.setPosition(startingPosition);
 
         //Initialize limelight
@@ -155,10 +157,7 @@ public class TeleOp extends LinearOpMode {
 
             //Check for any tags
             if(closestTag == null){
-                telemetry.addLine("No tags detected");
-
-                //Return servo hood to midpoint
-                pollenTurretServo1.setPosition(servoHoodDefault);
+                pollenTurretFlywheel.setPower(0);
                 //pollenTurretServo2.setPosition(servoHoodDefault);
             }
             else{
@@ -170,10 +169,15 @@ public class TeleOp extends LinearOpMode {
 
                 //Toggle launcher hardware
                 if(launcherOn){
-                    pollenTurretFlywheel.setPower(lerp(launcherMinSpeed, launcherMaxSpeed, maxDistance/closestTagDistance));
+                    launcherVelocityTarget = lerp(launcherMinSpeed, launcherMaxSpeed, maxDistance/closestTagDistance);
+
+                    //Only enable feed when pollen flywheel is up to speed
+                    if(Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) < launcherVelocityTolerance){
+                        feedMotor.setPower(intakeSpeed);
+                    }
                 }
                 else{
-                    pollenTurretFlywheel.setPower(0);
+                    pollenTurretFlywheel.setVelocity(0);
                 }
 
                 //PID input for targeting
@@ -182,9 +186,9 @@ public class TeleOp extends LinearOpMode {
 
                 telemetry.addData("Pollen PID correction: ", correction);
 
-                pollenTurretServo1.setPosition(correction);
-                //pollenTurretServo2.setPosition(correction);
+                pollenTurretDrive.setTargetPosition((int)Math.round(pollenTurretDrive.getCurrentPosition() + correction));
             }
+            pollenTurretFlywheel.setVelocity(launcherVelocityTarget);
 
             telemetry.addData("Pinpoint pos: ", localizer.pose());
 
@@ -203,7 +207,22 @@ public class TeleOp extends LinearOpMode {
             }
             else{
                 intake.setPower(0);
-                feedMotor.setPower(0);
+                if(!launcherOn){
+                    feedMotor.setPower(0);
+                }
+            }
+            telemetry.addLine("Launcher vel: " + pollenTurretDrive.getVelocity() + "/" + launcherVelocityTarget);
+            if(launcherVelocityTarget != 0 && Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) < launcherVelocityTolerance){
+                telemetry.addLine("Launcher reached target velocity");
+            }
+            else if(launcherVelocityTarget != 0 && Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) > launcherVelocityTolerance){
+                telemetry.addLine("Launcher spinning up");
+            }
+            else if(launcherVelocityTarget == 0 && pollenTurretFlywheel.getVelocity() != 0){
+                telemetry.addLine("Launcher spinning down");
+            }
+            else{
+                telemetry.addLine("Launcher inactive");
             }
 
             //Some really cool movement code I stole from bartholomew

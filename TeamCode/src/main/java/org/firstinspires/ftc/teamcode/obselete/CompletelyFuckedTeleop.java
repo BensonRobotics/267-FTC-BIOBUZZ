@@ -15,6 +15,7 @@ import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.seattlesolvers.solverslib.controller.PIDController;
 
+@Deprecated
 @com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "Fucked teleop", group = "Fucked")
 public class CompletelyFuckedTeleop extends LinearOpMode {
     DcMotor frontLeftMotor;

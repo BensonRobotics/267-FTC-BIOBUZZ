@@ -1,13 +1,12 @@
-package org.firstinspires.ftc.teamcode;
+package org.firstinspires.ftc.teamcode.comp_opmodes;
 
 import static com.pedropathing.ivy.Scheduler.schedule;
 import static com.pedropathing.ivy.pedro.PedroCommands.follow;
-import static org.firstinspires.ftc.teamcode.LauncherProto.lerp;
+import static org.firstinspires.ftc.teamcode.obselete.LauncherProto.lerp;
 
 import com.pedropathing.api.Paths;
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.localization.Localizer;
 import com.pedropathing.math.Pose;
@@ -26,10 +25,10 @@ import com.seattlesolvers.solverslib.controller.PIDController;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
+import org.firstinspires.ftc.teamcode.util.RState;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @Autonomous(name = "Auto", group = "Proto", preselectTeleOp = "Fucked teleop")
 public class Auto extends LinearOpMode {
