@@ -7,48 +7,49 @@ import com.pedropathing.revhub.localizers.PinpointLocalizer;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
-import org.firstinspires.ftc.teamcode.util.RState;
+import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
+import org.firstinspires.ftc.teamcode.util.Alliance;
+import org.firstinspires.ftc.teamcode.util.Configuration;
+
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.rowanmcalpin.nextftc.core.command.Command;
+import com.rowanmcalpin.nextftc.ftc.driving.MecanumDriverControlled;
+import com.rowanmcalpin.nextftc.ftc.gamepad.GamepadEx;
+import com.rowanmcalpin.nextftc.ftc.hardware.controllables.MotorEx;
 import com.seattlesolvers.solverslib.controller.PIDController;
 
 import java.util.List;
 
-@com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "TeleOp", group = "Proto")
+@com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "TeleOp", group = "Comp")
 public class TeleOp extends LinearOpMode {
-    DcMotor frontLeftMotor;
-    DcMotor frontRightMotor;
-    DcMotor rearLeftMotor;
-    DcMotor rearRightMotor;
+    MotorEx frontLeftMotor;
+    MotorEx frontRightMotor;
+    MotorEx rearLeftMotor;
+    MotorEx rearRightMotor;
     DcMotor intake;
     DcMotor feedMotor;
 
     DcMotorEx pollenTurretFlywheel;
     DcMotorEx pollenTurretDrive;
     Servo pollenTurretHood;
-    //Servo pollenTurretServo2;
     Localizer localizer;
-
-    //DcMotor nectarTurretFlywheel;
-    //Servo nectarTurretHood;
-    //Servo nectarTurretServo;
-    GoBildaPinpointDriver pinpoint;
     boolean intakeOn;
     boolean launcherOn;
 
     //TODO: tune
     double intakeSpeed = 1;
-    double driveSpeed = 1;
     double feedSpeed = 1;
 
     //Hood settings
-    double servoHoodDefault = 0.5;
     double hoodMax = 0.5;
     double hoodMin = 0;
 
@@ -72,22 +73,32 @@ public class TeleOp extends LinearOpMode {
 
     //PID controller for pollen
     PIDController pollenPID;
+    public IMU imu;
+    public MotorEx[] motors;
 
     public Pose2D startingPosition;
+    public Command driverControlled;
+
+    public int fieldCenterX = 72;
+    public int fieldCenterY = 72;
+
 
     @Override
     public void runOpMode(){
         localizer = new PinpointLocalizer(hardwareMap, Constants.localizerConfig);
-        localizer.setPose(RState.position);
+        if(Configuration.endingPos != null){
+            localizer.setPose(Configuration.endingPos);
+            Configuration.endingPos = null;
+        }
 
         //Initialize pollen PID controller
         pollenPID = new PIDController(p, i, d);
 
         //Initialize drive motors
-        frontLeftMotor = hardwareMap.get(DcMotor.class, "fl_motor");
-        frontRightMotor = hardwareMap.get(DcMotor.class, "fr_motor");
-        rearLeftMotor = hardwareMap.get(DcMotor.class, "rl_motor");
-        rearRightMotor = hardwareMap.get(DcMotor.class, "rr_motor");
+        frontLeftMotor = new MotorEx("fl_motor");
+        frontRightMotor = new MotorEx("fr_motor");
+        rearLeftMotor = new MotorEx("rl_motor");
+        rearRightMotor = new MotorEx("rr_motor");
 
         //Initialize intake system
         intake = hardwareMap.get(DcMotor.class, "intake_motor");
@@ -102,34 +113,40 @@ public class TeleOp extends LinearOpMode {
         pollenTurretDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         pollenTurretDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
 
-        //Nectar not used for lm1
-        //nectarTurretFlywheel = hardwareMap.get(DcMotor.class, "nectar_launcher");
-        //nectarTurretHood = hardwareMap.get(Servo.class, "nectar_hood");
-        //nectarTurretServo = hardwareMap.get(Servo.class, "nectar_servo");
+        GamepadEx gamepad = new GamepadEx(gamepad1, 0, 0, 0, true);
 
-        //Initialize pinpoint
-        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
-        pinpoint.setPosition(startingPosition);
+        motors = new MotorEx[] { frontLeftMotor, frontRightMotor, rearLeftMotor, rearRightMotor };
+        imu = hardwareMap.get(IMU.class, "imu");
+        IMU.Parameters parameters = new IMU.Parameters(
+                new RevHubOrientationOnRobot(RevHubOrientationOnRobot.LogoFacingDirection.UP,
+                        RevHubOrientationOnRobot.UsbFacingDirection.FORWARD));
+        imu.initialize(parameters);
+        imu.resetYaw();
 
         //Initialize limelight
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
         limelight.setPollRateHz(100);
         limelight.start();
 
-        //Swap limelight to pipeline 0 (Blue I believe)
-        limelight.pipelineSwitch(0);
+
+        if(Configuration.alliance == Alliance.Blue){
+            limelight.pipelineSwitch(0);
+        }
+        else if(Configuration.alliance == Alliance.Red){
+            limelight.pipelineSwitch(1);
+        }
 
         waitForStart();
 
         //Predefine pollen hood position
         pollenTurretHood.setPosition(0.5);
 
+        //Invoke holonomic drivetrain
+        driverControlled = new MecanumDriverControlled(motors, gamepad, false, imu);
+        driverControlled.invoke();
+
         //Main event loop
         while(opModeIsActive()){
-
-            //Update pinpoint odometry
-            pinpoint.update();
-
             localizer.update();
 
             //Fetch limelight
@@ -137,7 +154,7 @@ public class TeleOp extends LinearOpMode {
 
             //Check for limelight disconnect and warn user
             if(!limelight.isConnected()){
-                telemetry.addLine("Limelight disconnected. Robot reboot recommended. Check wiring.");
+                telemetry.addLine("WARN: Limelight disconnected. Robot reboot recommended. Check wiring.");
             }
 
             List<LLResultTypes.FiducialResult> fiducials = result.getFiducialResults();
@@ -148,17 +165,22 @@ public class TeleOp extends LinearOpMode {
 
             //Find closest april tag
             for (LLResultTypes.FiducialResult fiducial : fiducials) {
-                double distance = calculateDistance(fiducial.getRobotPoseTargetSpace().getPosition().x, fiducial.getRobotPoseTargetSpace().getPosition().y, fiducial.getRobotPoseTargetSpace().getPosition().z);
+                Pose3D robotPose = fiducial.getRobotPoseTargetSpace();
+
+                double x = robotPose.getPosition().x;
+                double y = robotPose.getPosition().y;
+
+                double distance = Math.hypot(x, y);
                 if(distance < closestTagDistance){
                     closestTagDistance = distance;
                     closestTag = fiducial;
                 }
             }
 
+            //TODO: Implement system for pointing turret towards the middle of the field from Auto.java
             //Check for any tags
             if(closestTag == null){
                 pollenTurretFlywheel.setPower(0);
-                //pollenTurretServo2.setPosition(servoHoodDefault);
             }
             else{
 
@@ -173,7 +195,7 @@ public class TeleOp extends LinearOpMode {
 
                     //Only enable feed when pollen flywheel is up to speed
                     if(Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) < launcherVelocityTolerance){
-                        feedMotor.setPower(intakeSpeed);
+                        feedMotor.setPower(feedSpeed);
                     }
                 }
                 else{
@@ -189,9 +211,6 @@ public class TeleOp extends LinearOpMode {
                 pollenTurretDrive.setTargetPosition((int)Math.round(pollenTurretDrive.getCurrentPosition() + correction));
             }
             pollenTurretFlywheel.setVelocity(launcherVelocityTarget);
-
-            telemetry.addData("Pinpoint pos: ", localizer.pose());
-
             //Toggle intake
             if(gamepad1.aWasPressed()){
                 intakeOn = !intakeOn;
@@ -211,6 +230,7 @@ public class TeleOp extends LinearOpMode {
                     feedMotor.setPower(0);
                 }
             }
+            telemetry.addData("Position: ", localizer.pose());
             telemetry.addLine("Launcher vel: " + pollenTurretDrive.getVelocity() + "/" + launcherVelocityTarget);
             if(launcherVelocityTarget != 0 && Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) < launcherVelocityTolerance){
                 telemetry.addLine("Launcher reached target velocity");
@@ -225,50 +245,6 @@ public class TeleOp extends LinearOpMode {
                 telemetry.addLine("Launcher inactive");
             }
 
-            //Some really cool movement code I stole from bartholomew
-            //double heading = pinpoint.getHeading(AngleUnit.RADIANS);
-            double heading = localizer.pose().heading();
-
-            double fr = 0;
-            double fl = 0;
-            double br = 0;
-            double bl = 0;
-
-            double leftStickY = gamepad1.left_stick_y;
-            double leftStickX = gamepad1.left_stick_x;
-            double rightStickX = -gamepad1.right_stick_x;
-            double rightStickY = gamepad1.right_stick_y;
-
-            double theta = Math.atan2(-leftStickX, leftStickY);
-            theta += heading;
-
-            telemetry.addData("IMU Yaw ", heading);
-
-            double magnitude = Math.hypot(-leftStickX, leftStickY);
-
-            double leftPower = leftStickY - leftStickX;
-            double rightPower = -leftStickY - leftStickX;
-
-            double rX = -gamepad1.right_stick_x;
-            double flbr = magnitude * Math.sin(theta + (0.25 * Math.PI));
-            double frbl = magnitude * Math.sin(theta - (0.25 * Math.PI));
-
-            fr = frbl - rX;
-            fl = flbr + rX;
-            br = flbr - rX;
-            bl = frbl + rX;
-
-            double denominator = Math.max(Math.max(Math.max(Math.abs(fl), Math.abs(fr)), Math.max(Math.abs(br), Math.abs(bl))), 1);
-
-            fr /= -denominator;
-            fl /= -denominator;
-            br /= denominator;
-            bl /= denominator;
-
-            frontRightMotor.setPower(fr);
-            frontLeftMotor.setPower(fl);
-            rearRightMotor.setPower(br);
-            rearLeftMotor.setPower(bl);
             telemetry.update();
         }
     }
