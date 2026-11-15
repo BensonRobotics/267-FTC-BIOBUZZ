@@ -1,8 +1,10 @@
 package org.firstinspires.ftc.teamcode.comp_opmodes;
 
+import static com.qualcomm.robotcore.util.Range.clip;
 import static org.firstinspires.ftc.teamcode.obselete.LauncherProto.lerp;
 
 import com.pedropathing.localization.Localizer;
+import com.pedropathing.math.Pose;
 import com.pedropathing.revhub.localizers.PinpointLocalizer;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
@@ -11,30 +13,28 @@ import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
-import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
+import org.firstinspires.ftc.robotcore.external.navigation.Position;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.util.Alliance;
+import org.firstinspires.ftc.teamcode.util.AutoMode;
 import org.firstinspires.ftc.teamcode.util.Configuration;
 
-import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
-import com.rowanmcalpin.nextftc.core.command.Command;
-import com.rowanmcalpin.nextftc.ftc.driving.MecanumDriverControlled;
-import com.rowanmcalpin.nextftc.ftc.gamepad.GamepadEx;
-import com.rowanmcalpin.nextftc.ftc.hardware.controllables.MotorEx;
+import com.qualcomm.robotcore.util.Range;
 import com.seattlesolvers.solverslib.controller.PIDController;
 
 import java.util.List;
 
 @com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "TeleOp", group = "Comp")
 public class TeleOp extends LinearOpMode {
-    MotorEx frontLeftMotor;
-    MotorEx frontRightMotor;
-    MotorEx rearLeftMotor;
-    MotorEx rearRightMotor;
+    DcMotor frontLeftMotor;
+    DcMotor frontRightMotor;
+    DcMotor rearLeftMotor;
+    DcMotor rearRightMotor;
     DcMotor intake;
     DcMotor feedMotor;
 
@@ -42,63 +42,80 @@ public class TeleOp extends LinearOpMode {
     DcMotorEx pollenTurretDrive;
     Servo pollenTurretHood;
     Localizer localizer;
-    boolean intakeOn;
+    boolean intakeForwards;
     boolean launcherOn;
+    boolean intakeBackwards;
 
     //TODO: tune
-    double intakeSpeed = 1;
-    double feedSpeed = 1;
+    final double intakeSpeed = -0.75;
+    final double feedSpeed = -0.8;
 
     //Hood settings
-    double hoodMax = 0.5;
-    double hoodMin = 0;
+    double hoodMax = 0.7;
+    double hoodMin = 0.2;
 
     //Launcher settings
-    double maxDistance = 1.6;
+    final double maxDistance = 1.1;
 
-    //Speeds are in TPM (Ticks Per Minute) counts
-    double launcherMinSpeed = -2800;
-    double launcherMaxSpeed = -1000;
+    //Speeds are in TPS (Ticks Per Seconds) counts
+    double launcherMinSpeed = -2200;
+    double launcherMaxSpeed = -1700;
 
-    double launcherVelocityTolerance = 100;
+    final double maxTurretRot = 750;
+    final double minTurretRot = -975;
+
+    final double launcherVelocityTolerance = 100;
     double launcherVelocityTarget = 0;
 
     Limelight3A limelight;
 
     //PID constants
     //TODO: tune
-    final double p = 0.01d;
-    final double i = 0.0d;
-    final double d = 0.001d;
+    final double p = 3d;
+    final double i = 0.8d;
+    final double d = 0.01d;
 
     //PID controller for pollen
     PIDController pollenPID;
     public IMU imu;
-    public MotorEx[] motors;
-
-    public Pose2D startingPosition;
-    public Command driverControlled;
-
-    public int fieldCenterX = 72;
-    public int fieldCenterY = 72;
+    boolean feedOverride = false;
+    boolean turretManualOverride = false;
+    double manualOverrideSpeed = 0;
+    boolean targetCenter = false;
 
 
     @Override
     public void runOpMode(){
         localizer = new PinpointLocalizer(hardwareMap, Constants.localizerConfig);
-        if(Configuration.endingPos != null){
+        pollenTurretDrive = hardwareMap.get(DcMotorEx.class, "pollen_turret_drive");
+
+        if(Configuration.endingPos != null && Configuration.autoMode != AutoMode.Disabled){
+            telemetry.addLine("Received config from autonomous.");
+            telemetry.update();
             localizer.setPose(Configuration.endingPos);
             Configuration.endingPos = null;
+        }
+        else{
+            telemetry.addLine("Align turret with markings");
+            telemetry.update();
+            pollenTurretDrive.setTargetPosition(0);
+            //Reset pollen turret drive motor encoder
+            pollenTurretDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+            pollenTurretDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+            pollenTurretDrive.setPower(1);
         }
 
         //Initialize pollen PID controller
         pollenPID = new PIDController(p, i, d);
 
         //Initialize drive motors
-        frontLeftMotor = new MotorEx("fl_motor");
-        frontRightMotor = new MotorEx("fr_motor");
-        rearLeftMotor = new MotorEx("rl_motor");
-        rearRightMotor = new MotorEx("rr_motor");
+        frontLeftMotor = hardwareMap.get(DcMotorEx.class, "fl_motor");
+        frontRightMotor = hardwareMap.get(DcMotorEx.class, "fr_motor");
+        rearLeftMotor = hardwareMap.get(DcMotorEx.class, "rl_motor");
+        rearRightMotor = hardwareMap.get(DcMotorEx.class, "rr_motor");
+
+        frontRightMotor.setDirection(DcMotor.Direction.REVERSE);
+        rearRightMotor.setDirection(DcMotor.Direction.REVERSE);
 
         //Initialize intake system
         intake = hardwareMap.get(DcMotor.class, "intake_motor");
@@ -107,19 +124,12 @@ public class TeleOp extends LinearOpMode {
         //Initialize pollen turret system
         pollenTurretFlywheel = hardwareMap.get(DcMotorEx.class, "pollen_launcher");
         pollenTurretHood = hardwareMap.get(Servo.class, "pollen_hood");
-        pollenTurretDrive = hardwareMap.get(DcMotorEx.class, "pollen_turret_drive");
 
-        //Reset pollen turret drive motor encoder
-        pollenTurretDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        pollenTurretDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
 
-        GamepadEx gamepad = new GamepadEx(gamepad1, 0, 0, 0, true);
-
-        motors = new MotorEx[] { frontLeftMotor, frontRightMotor, rearLeftMotor, rearRightMotor };
         imu = hardwareMap.get(IMU.class, "imu");
         IMU.Parameters parameters = new IMU.Parameters(
                 new RevHubOrientationOnRobot(RevHubOrientationOnRobot.LogoFacingDirection.UP,
-                        RevHubOrientationOnRobot.UsbFacingDirection.FORWARD));
+                        RevHubOrientationOnRobot.UsbFacingDirection.LEFT));
         imu.initialize(parameters);
         imu.resetYaw();
 
@@ -141,14 +151,24 @@ public class TeleOp extends LinearOpMode {
         //Predefine pollen hood position
         pollenTurretHood.setPosition(0.5);
 
-        //Invoke holonomic drivetrain
-        driverControlled = new MecanumDriverControlled(motors, gamepad, false, imu);
-        driverControlled.invoke();
-
         //Main event loop
         while(opModeIsActive()){
             localizer.update();
+            double y  = -gamepad1.left_stick_y;
+            double x  = gamepad1.left_stick_x * 1.1;
+            double rx = gamepad1.right_stick_x;
 
+            if (gamepad1.optionsWasPressed()) imu.resetYaw();
+            double heading = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
+
+            double rotX = x * Math.cos(-heading) - y * Math.sin(-heading);
+            double rotY = x * Math.sin(-heading) + y * Math.cos(-heading);
+
+            double denom = Math.max(Math.abs(rotY) + Math.abs(rotX) + Math.abs(rx), 1);
+            frontLeftMotor.setPower((rotY + rotX + rx) / denom);
+            rearLeftMotor.setPower((rotY - rotX + rx) / denom);
+            frontRightMotor.setPower((rotY - rotX - rx) / denom);
+            rearRightMotor.setPower((rotY + rotX - rx) / denom);
             //Fetch limelight
             LLResult result = limelight.getLatestResult();
 
@@ -157,94 +177,206 @@ public class TeleOp extends LinearOpMode {
                 telemetry.addLine("WARN: Limelight disconnected. Robot reboot recommended. Check wiring.");
             }
 
-            List<LLResultTypes.FiducialResult> fiducials = result.getFiducialResults();
-
-            //Init variables for closest tag
-            LLResultTypes.FiducialResult closestTag = null;
-            double closestTagDistance = Double.POSITIVE_INFINITY;
-
-            //Find closest april tag
-            for (LLResultTypes.FiducialResult fiducial : fiducials) {
-                Pose3D robotPose = fiducial.getRobotPoseTargetSpace();
-
-                double x = robotPose.getPosition().x;
-                double y = robotPose.getPosition().y;
-
-                double distance = Math.hypot(x, y);
-                if(distance < closestTagDistance){
-                    closestTagDistance = distance;
-                    closestTag = fiducial;
-                }
+            if(turretManualOverride){
+                telemetry.addLine("WARN: Turret manual override activated. Restart program if this was unintentional.");
             }
 
-            //TODO: Implement system for pointing turret towards the middle of the field from Auto.java
-            //Check for any tags
-            if(closestTag == null){
-                pollenTurretFlywheel.setPower(0);
-            }
-            else{
+            if(!turretManualOverride) {
+                List<LLResultTypes.FiducialResult> fiducials = result.getFiducialResults();
+                telemetry.addData("Detected fiducials: ", (long) fiducials.size());
 
-                telemetry.addData("Targeting tag: ", closestTag.getFiducialId());
+                //Init variables for closest tag
+                LLResultTypes.FiducialResult closestTag = null;
+                double closestTagDistance = Double.POSITIVE_INFINITY;
 
-                //Rough estimates for flywheel power & hood position
-                pollenTurretHood.setPosition(lerp(hoodMin, hoodMax, maxDistance/closestTagDistance));
+                //Find closest april tag
+                for (LLResultTypes.FiducialResult fiducial : fiducials) {
+                    Pose3D robotPose = fiducial.getRobotPoseTargetSpace();
 
-                //Toggle launcher hardware
-                if(launcherOn){
-                    launcherVelocityTarget = lerp(launcherMinSpeed, launcherMaxSpeed, maxDistance/closestTagDistance);
 
-                    //Only enable feed when pollen flywheel is up to speed
-                    if(Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) < launcherVelocityTolerance){
-                        feedMotor.setPower(feedSpeed);
+                    double distance = -robotPose.getPosition().z;
+                    if (distance < closestTagDistance) {
+                        closestTagDistance = distance;
+                        closestTag = fiducial;
                     }
                 }
+
+                //TODO: Implement system for pointing turret towards the middle of the field from Auto.java
+                //Check for any tags
+
+                if (closestTag == null) {
+                    if(targetCenter){
+                        double bearing = Math.toDegrees(Math.atan2(72 -heading, 72 - heading));
+                        double rel = AngleUnit.normalizeDegrees(bearing - Math.toDegrees(heading));
+                        pollenTurretDrive.setTargetPosition((int) Math.round(clip(rel * (537.7 / 360) * 3.75, minTurretRot, maxTurretRot)));
+                    }
+                    launcherVelocityTarget = 0;
+                    pollenPID.reset();
+                } else {
+                    Position pose = closestTag.getRobotPoseTargetSpace().getPosition();
+                    telemetry.addData("Targeting tag: ", closestTag.getFiducialId());
+
+                    //Rough estimates for flywheel power & hood position
+                    pollenTurretHood.setPosition(lerp(hoodMax, hoodMin, closestTagDistance / maxDistance));
+                    telemetry.addData("Recommended launcher vel: ", lerp(launcherMaxSpeed, launcherMinSpeed, closestTagDistance / maxDistance));
+                    //Toggle launcher hardware
+                    if (launcherOn) {
+                        launcherVelocityTarget = lerp(launcherMaxSpeed, launcherMinSpeed, closestTagDistance / maxDistance);
+                        //launcherVelocityTarget = 0.8;
+
+                        //Only enable feed when pollen flywheel is up to speed
+                        //if (Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) < launcherVelocityTolerance) {
+                        //    feedMotor.setPower(feedSpeed);
+                        //}
+                    } else {
+                        launcherVelocityTarget = 0;
+                    }
+
+                    //PID input for targeting
+                    pollenPID.setSetPoint(0.0);
+                    double correction = pollenPID.calculate(closestTag.getTargetXDegrees());
+
+                    telemetry.addData("Pollen PID correction: ", correction);
+
+                    pollenTurretDrive.setTargetPosition((int) Math.round(Range.clip(pollenTurretDrive.getCurrentPosition() + (correction * (537.7 / 360)), minTurretRot, maxTurretRot)));
+                }
+                if(gamepad1.b){
+                    launcherOn = true;
+                }
                 else{
-                    pollenTurretFlywheel.setVelocity(0);
+                    launcherOn = false;
+                }
+                pollenTurretFlywheel.setVelocity(launcherVelocityTarget);
+            }
+
+            if(turretManualOverride){
+                telemetry.addData("Manual override speed: ", manualOverrideSpeed);
+                if(gamepad2.dpadUpWasPressed()){
+                    pollenTurretHood.setPosition(pollenTurretHood.getPosition() + 0.1);
+                }
+                else if(gamepad2.dpadDownWasPressed()){
+                    pollenTurretHood.setPosition(pollenTurretHood.getPosition() - 0.1);
                 }
 
-                //PID input for targeting
-                pollenPID.setSetPoint(0.0);
-                double correction = pollenPID.calculate(closestTag.getTargetXPixels());
+                if(gamepad2.left_stick_x > 0 && pollenTurretDrive.getCurrentPosition() > minTurretRot){
+                    pollenTurretDrive.setPower(gamepad2.left_stick_x * -0.6);
+                }
+                else if(gamepad2.left_stick_x < 0 && pollenTurretDrive.getCurrentPosition() < maxTurretRot){
+                    pollenTurretDrive.setPower(gamepad2.left_stick_x * -0.6 );
+                }
+                else{
+                    pollenTurretDrive.setPower(0);
+                }
 
-                telemetry.addData("Pollen PID correction: ", correction);
+                launcherOn = gamepad2.b;
 
-                pollenTurretDrive.setTargetPosition((int)Math.round(pollenTurretDrive.getCurrentPosition() + correction));
+                if(gamepad2.dpadRightWasPressed() && manualOverrideSpeed < 0.9){
+                    manualOverrideSpeed -= 0.1;
+                }
+                else if(gamepad2.dpadLeftWasPressed() && manualOverrideSpeed > -0.9){
+                    manualOverrideSpeed += 0.1;
+                }
+
+                if(launcherOn){
+                    pollenTurretFlywheel.setPower(manualOverrideSpeed);
+                    feedMotor.setPower(feedSpeed);
+                }
+                else{
+                    pollenTurretFlywheel.setPower(0);
+                }
             }
-            pollenTurretFlywheel.setVelocity(launcherVelocityTarget);
+
+            if(gamepad1.dpadUpWasPressed() && hoodMax < 0.9){
+                hoodMax += 0.1;
+                hoodMin += 0.1;
+            }
+            else if(gamepad1.dpadDownWasPressed() && hoodMin > 0){
+                hoodMax -= 0.1;
+                hoodMin -= 0.1;
+            }
+
+            if(gamepad1.dpadRightWasPressed() && launcherMaxSpeed < -1000){
+                launcherMinSpeed += 200;
+                launcherMaxSpeed += 200;
+            }
+            else if(gamepad1.dpadLeftWasPressed() && launcherMinSpeed > -2800){
+                launcherMinSpeed -= 200;
+                launcherMaxSpeed -= 200;
+            }
+
             //Toggle intake
-            if(gamepad1.aWasPressed()){
-                intakeOn = !intakeOn;
+            if(gamepad1.right_bumper){
+
+                intakeForwards = true;
+                intakeBackwards = false;
             }
-            if(gamepad1.bWasPressed()){
-                launcherOn = !launcherOn;
+            else{
+                intakeForwards = false;
+            }
+
+            if(gamepad1.left_bumper){
+                intakeBackwards = true;
+                intakeForwards = false;
+            }
+            else{
+                intakeBackwards = false;
+            }
+
+            if(gamepad1.right_trigger_pressed){
+                feedMotor.setPower(feedSpeed);
+            }
+            else if(gamepad1.left_trigger_pressed){
+                feedMotor.setPower(-feedSpeed);
+            }
+            else{
+                feedMotor.setPower(0);
+            }
+
+            if(gamepad1.xWasPressed()){
+                targetCenter = !targetCenter;
+            }
+
+            if(gamepad2.startWasPressed() && !turretManualOverride){
+                pollenTurretDrive.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                pollenTurretDrive.setPower(0);
+                pollenTurretFlywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+                turretManualOverride = true;
             }
 
             //Enable/Disable intake system
-            if(intakeOn){
+            if(intakeForwards){
                 intake.setPower(intakeSpeed);
-                feedMotor.setPower(feedSpeed);
+            }
+            else if(intakeBackwards){
+                intake.setPower(-intakeSpeed);
             }
             else{
                 intake.setPower(0);
-                if(!launcherOn){
-                    feedMotor.setPower(0);
-                }
-            }
-            telemetry.addData("Position: ", localizer.pose());
-            telemetry.addLine("Launcher vel: " + pollenTurretDrive.getVelocity() + "/" + launcherVelocityTarget);
-            if(launcherVelocityTarget != 0 && Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) < launcherVelocityTolerance){
-                telemetry.addLine("Launcher reached target velocity");
-            }
-            else if(launcherVelocityTarget != 0 && Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) > launcherVelocityTolerance){
-                telemetry.addLine("Launcher spinning up");
-            }
-            else if(launcherVelocityTarget == 0 && pollenTurretFlywheel.getVelocity() != 0){
-                telemetry.addLine("Launcher spinning down");
-            }
-            else{
-                telemetry.addLine("Launcher inactive");
             }
 
+            //telemetry.addData("Position: ", localizer.pose());
+            if(!turretManualOverride){
+                telemetry.addLine("Launcher vel: " + pollenTurretDrive.getVelocity() + "/" + launcherVelocityTarget);
+                if(launcherVelocityTarget != 0 && Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) < launcherVelocityTolerance){
+                    telemetry.addLine("Launcher reached target velocity");
+                }
+                else if(launcherVelocityTarget != 0 && Math.abs(pollenTurretFlywheel.getVelocity() - launcherVelocityTarget) > launcherVelocityTolerance){
+                    telemetry.addLine("Launcher spinning up");
+                }
+                else if(launcherVelocityTarget == 0 && pollenTurretFlywheel.getVelocity() != 0){
+                    telemetry.addLine("Launcher spinning down");
+                }
+                else{
+                    telemetry.addLine("Launcher inactive");
+                }
+            }
+
+            //telemetry.addData("Pollen hood target: ", pollenTurretHood.getPosition());
+            //telemetry.addData("Pollen turret target: ", pollenTurretDrive.getTargetPosition());
+            //telemetry.addData("Pollen turret position: ", pollenTurretDrive.getCurrentPosition());
+
+            telemetry.addLine("Pollen turret speed range: " + launcherMinSpeed + " to " + launcherMaxSpeed);
+            telemetry.addLine("Pollen turret hood range: " + hoodMin + " to " + hoodMax);
             telemetry.update();
         }
     }

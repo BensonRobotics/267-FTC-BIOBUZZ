@@ -15,7 +15,7 @@ import org.firstinspires.ftc.teamcode.pedro.Constants;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 
 @Deprecated
-@com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "Teleop", group = "Backup")
+@com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "T", group = "Backup")
 public class Movement extends LinearOpMode {
     DcMotor frontLeftMotor;
     DcMotor frontRightMotor;

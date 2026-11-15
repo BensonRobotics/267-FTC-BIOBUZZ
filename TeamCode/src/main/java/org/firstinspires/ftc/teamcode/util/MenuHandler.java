@@ -12,7 +12,7 @@ public class MenuHandler {
     private final MenuOption[] options = new MenuOption[] {
       new MenuOption("Alliance", new String[] {"Blue", "Red"}),
       new MenuOption("Starting position", new String[]{"Left Of Park", "Right Of Park"}),
-      new MenuOption("Auto Mode", new String[]{"Just Shoot", "Shoot Then Intake", "Shoot, Intake, and Shoot"})
+      new MenuOption("Auto Mode", new String[]{"Just Shoot", "Shoot Then Park", "Disabled"})
     };
 
     public MenuHandler(Telemetry tel){
@@ -38,10 +38,10 @@ public class MenuHandler {
             return;
         }
         currentMenuIdx += amount;
-        if(currentMenuIdx > options.length){
+        if(currentMenuIdx >= options.length){
             currentMenuIdx = 0;
         }
-        else if(currentMenuIdx < 0){
+        else if(currentMenuIdx <= 0){
             currentMenuIdx = options.length;
         }
     }
@@ -51,7 +51,7 @@ public class MenuHandler {
             return;
         }
         options[currentMenuIdx].optionIdx++;
-        if(options[currentMenuIdx].optionIdx > options[currentMenuIdx].options.length){
+        if(options[currentMenuIdx].optionIdx >= options[currentMenuIdx].options.length){
             options[currentMenuIdx].optionIdx = 0;
         }
     }
