@@ -213,12 +213,10 @@ public class TeleOp extends LinearOpMode {
                     launcherVelocityTarget = 0;
                     pollenPID.reset();
                 } else {
-                    Position pose = closestTag.getRobotPoseTargetSpace().getPosition();
                     telemetry.addData("Targeting tag: ", closestTag.getFiducialId());
 
                     //Rough estimates for flywheel power & hood position
                     pollenTurretHood.setPosition(lerp(hoodMax, hoodMin, closestTagDistance / maxDistance));
-                    telemetry.addData("Recommended launcher vel: ", lerp(launcherMaxSpeed, launcherMinSpeed, closestTagDistance / maxDistance));
                     //Toggle launcher hardware
                     if (launcherOn) {
                         launcherVelocityTarget = lerp(launcherMaxSpeed, launcherMinSpeed, closestTagDistance / maxDistance);
@@ -235,9 +233,6 @@ public class TeleOp extends LinearOpMode {
                     //PID input for targeting
                     pollenPID.setSetPoint(0.0);
                     double correction = pollenPID.calculate(closestTag.getTargetXDegrees());
-
-                    telemetry.addData("Pollen PID correction: ", correction);
-
                     pollenTurretDrive.setTargetPosition((int) Math.round(Range.clip(pollenTurretDrive.getCurrentPosition() + (correction * (537.7 / 360)), minTurretRot, maxTurretRot)));
                 }
                 if(gamepad1.b){
