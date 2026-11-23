@@ -5,8 +5,6 @@ import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 import static com.qualcomm.robotcore.util.Range.clip;
 import static org.firstinspires.ftc.teamcode.obselete.LauncherProto.lerp;
 
-import android.os.Environment;
-
 import com.pedropathing.api.Paths;
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.follower.Follower;
@@ -15,7 +13,6 @@ import com.pedropathing.localization.Localizer;
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 import com.pedropathing.revhub.localizers.PinpointLocalizer;
-import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
@@ -24,24 +21,21 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.Servo;
-import com.qualcomm.robotcore.util.Range;
 import com.seattlesolvers.solverslib.controller.PIDController;
 
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
-import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
-import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.util.Alliance;
 import org.firstinspires.ftc.teamcode.util.AutoMode;
 import org.firstinspires.ftc.teamcode.util.Configuration;
 import org.firstinspires.ftc.teamcode.util.MenuHandler;
+import org.firstinspires.ftc.teamcode.util.MenuOption;
 import org.firstinspires.ftc.teamcode.util.MenuOptionExport;
 import org.firstinspires.ftc.teamcode.util.StartingPos;
 import org.firstinspires.ftc.teamcode.util.TurretState;
 
-import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -102,12 +96,12 @@ public class Auto extends LinearOpMode {
     private Vector2D center = new Vector2D(70, 70);
     private TurretState pollenDriveState = TurretState.UNDEFINED;
 
-    private final PoseFactory poseFactory = PoseFactory.degrees();
+    private static final PoseFactory poseFactory = PoseFactory.degrees();
 
     //Paths
 
     //Blue Starting Left of Park (blp)
-    private final Pose blpstart = poseFactory.of(132.8953, 8.5941, 180);
+    public static final Pose blpstart = poseFactory.of(132.8953, 8.5941, 180);
     private final Pose blppath1 = poseFactory.of(84.8466, 21.7318, 90);
     private final Pose blppath1Control1 = poseFactory.of(106.6546, 27.3959, 0);
     private final Pose blppath2Start = poseFactory.of(84.8466, 21.7318, 90);
@@ -123,7 +117,7 @@ public class Auto extends LinearOpMode {
 
     public Path[] blpPaths = new Path[]{blppath1(), blppath2()};
     //Blue Starting Right Of Park (brp)
-    private final Pose brpstart = poseFactory.of(132.3284, 57.0892, 180);
+    public static final Pose brpstart = poseFactory.of(132.3284, 57.0892, 180);
     private final Pose brppath1 = poseFactory.of(87.0356, 113.4685, -90);
     private final Pose brppath1Control1 = poseFactory.of(114.1536, 118.2692, 0);
     private final Pose brppath2Start = poseFactory.of(87.0356, 113.4685, -90);
@@ -137,11 +131,12 @@ public class Auto extends LinearOpMode {
     public Path brppath2() {
         return Paths.curve(brppath2Start, brppath2Control1, brppath2).linear(brppath2Start, brppath2);
     }
+
     public Path[] brpPaths = new Path[]{brppath1(), brppath2()};
 
 
     //Red Starting Left Of Park (rlp)
-    private final Pose rlpstart = poseFactory.of(8.6172, 130.0891, 0);
+    public static final Pose rlpstart = poseFactory.of(8.6172, 130.0891, 0);
     private final Pose rlppath1 = poseFactory.of(57.7866, 119.006, -90);
     private final Pose rlppath1Control1 = poseFactory.of(29.969, 114.5411, 0);
     private final Pose rlppath2Start = poseFactory.of(57.7866, 119.006, -90);
@@ -154,11 +149,12 @@ public class Auto extends LinearOpMode {
     public Path rlppath2() {
         return Paths.line(rlppath2Start, rlppath2).linear(rlppath2Start, rlppath2);
     }
+
     public Path[] rlpPaths = new Path[]{rlppath1(), rlppath2()};
 
 
     //Red Starting Right Of Park (rrp)
-    private final Pose rrpstart = poseFactory.of(8.514, 132.5668, 0);
+    public static final Pose rrpstart = poseFactory.of(8.514, 132.5668, 0);
     private final Pose rrppath1 = poseFactory.of(59.6287, 17.9496, 90);
     private final Pose rrppath1Control1 = poseFactory.of(25.5091, 44.1232, 0);
     private final Pose rrppath2Start = poseFactory.of(59.6287, 17.9496, 90);
@@ -196,18 +192,24 @@ public class Auto extends LinearOpMode {
         limelight.start();
 
         //Create menu handler
-        MenuHandler menuHandler = new MenuHandler(this.telemetry);
+        MenuHandler menuHandler = new MenuHandler(this.telemetry, new MenuOption[]{
+                new MenuOption("Alliance", new String[]{"Blue", "Red"}),
+                new MenuOption("Starting position", new String[]{"Left Of Park", "Right Of Park"}),
+                new MenuOption("Auto Mode", new String[]{"Just Shoot", "Shoot Then Park", "Disabled"})
+        });
         boolean configurationCompleted = false;
 
         //Handle menu
         while (opModeInInit()) {
             //Move menu selector
-            if (gamepad1.dpadDownWasPressed() || gamepad1.left_stick_y < -0.5) {
+            if (gamepad1.dpadDownWasPressed()) {
                 menuHandler.ChangeSelection(1);
-            } else if (gamepad1.dpadUpWasPressed() || gamepad1.left_stick_y > 0.5) {
+            } else if (gamepad1.dpadUpWasPressed()) {
                 menuHandler.ChangeSelection(-1);
-            } else if (gamepad1.dpadRightWasPressed() || gamepad1.leftStickButtonWasPressed()) {
-                menuHandler.EditCurrentSelection();
+            } else if (gamepad1.dpadRightWasPressed()) {
+                menuHandler.EditCurrentSelection(1);
+            } else if (gamepad1.dpadLeftWasPressed()) {
+                menuHandler.EditCurrentSelection(-1);
             }
 
             //Finish menu and export
@@ -226,8 +228,7 @@ public class Auto extends LinearOpMode {
                     Configuration.autoMode = AutoMode.JustShoot;
                 } else if (Objects.equals(menuExports[2].selection, "Shoot Then Park")) {
                     Configuration.autoMode = AutoMode.ShootThenPark;
-                }
-                else{
+                } else {
                     Configuration.autoMode = AutoMode.Disabled;
                 }
                 menuHandler.LockOptions();
@@ -283,7 +284,7 @@ public class Auto extends LinearOpMode {
         //Predefine pollen hood position
         pollenTurretHood.setPosition(0.5);
 
-        if(Configuration.autoMode == AutoMode.Disabled){
+        if (Configuration.autoMode == AutoMode.Disabled) {
             requestOpModeStop();
         }
         schedule(follow(follower, paths[0]));
@@ -313,7 +314,6 @@ public class Auto extends LinearOpMode {
             //Find closest april tag
             for (LLResultTypes.FiducialResult fiducial : fiducials) {
                 Pose3D robotPose = fiducial.getRobotPoseTargetSpace();
-
 
 
                 double distance = -robotPose.getPosition().z;

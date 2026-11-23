@@ -3,8 +3,9 @@ package org.firstinspires.ftc.teamcode.comp_opmodes;
 import static com.qualcomm.robotcore.util.Range.clip;
 import static org.firstinspires.ftc.teamcode.obselete.LauncherProto.lerp;
 
+import com.acmerobotics.dashboard.FtcDashboard;
+import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.localization.Localizer;
-import com.pedropathing.math.Pose;
 import com.pedropathing.revhub.localizers.PinpointLocalizer;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
@@ -15,11 +16,13 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
-import org.firstinspires.ftc.robotcore.external.navigation.Position;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.util.Alliance;
 import org.firstinspires.ftc.teamcode.util.AutoMode;
 import org.firstinspires.ftc.teamcode.util.Configuration;
+import org.firstinspires.ftc.teamcode.util.MenuHandler;
+import org.firstinspires.ftc.teamcode.util.MenuOption;
+import org.firstinspires.ftc.teamcode.util.StartingPos;
 
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.IMU;
@@ -30,6 +33,7 @@ import com.seattlesolvers.solverslib.controller.PIDController;
 import java.util.List;
 
 @com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "TeleOp", group = "Comp")
+
 public class TeleOp extends LinearOpMode {
     DcMotor frontLeftMotor;
     DcMotor frontRightMotor;
@@ -71,9 +75,10 @@ public class TeleOp extends LinearOpMode {
 
     //PID constants
     //TODO: tune
-    final double p = 3d;
-    final double i = 0.8d;
-    final double d = 0.01d;
+
+    public static volatile double P = 2d;
+    public static volatile double I = 0.0d;
+    public static volatile double D = 0.0d;
 
     //PID controller for pollen
     PIDController pollenPID;
@@ -103,10 +108,29 @@ public class TeleOp extends LinearOpMode {
             pollenTurretDrive.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
             pollenTurretDrive.setMode(DcMotor.RunMode.RUN_TO_POSITION);
             pollenTurretDrive.setPower(1);
+
+
+            if(Configuration.alliance == Alliance.Red){
+                if(Configuration.startingPos == StartingPos.LeftOfPark){
+                    localizer.setPose(Auto.rlpstart);
+                }
+                else if(Configuration.startingPos == StartingPos.RightOfPark){
+                    localizer.setPose(Auto.rrpstart);
+                }
+            }
+            else if(Configuration.alliance == Alliance.Blue){
+                if(Configuration.startingPos == StartingPos.LeftOfPark){
+                    localizer.setPose(Auto.blpstart);
+                }
+                else if(Configuration.startingPos == StartingPos.RightOfPark){
+                    localizer.setPose(Auto.brpstart);
+                }
+            }
+
         }
 
         //Initialize pollen PID controller
-        pollenPID = new PIDController(p, i, d);
+        pollenPID = new PIDController(P, I, D);
 
         //Initialize drive motors
         frontLeftMotor = hardwareMap.get(DcMotorEx.class, "fl_motor");
@@ -138,7 +162,6 @@ public class TeleOp extends LinearOpMode {
         limelight.setPollRateHz(100);
         limelight.start();
 
-
         if(Configuration.alliance == Alliance.Blue){
             limelight.pipelineSwitch(0);
         }
@@ -153,6 +176,14 @@ public class TeleOp extends LinearOpMode {
 
         //Main event loop
         while(opModeIsActive()){
+            //dashboard.updateConfig();
+            pollenPID = new PIDController(P, I, D);
+
+
+            //pollenPID.reset();
+            telemetry.addData("P: ", P);
+            telemetry.addData("I: ", I);
+            telemetry.addData("D: ", D);
             localizer.update();
             double y  = -gamepad1.left_stick_y;
             double x  = gamepad1.left_stick_x * 1.1;
@@ -206,9 +237,9 @@ public class TeleOp extends LinearOpMode {
 
                 if (closestTag == null) {
                     if(targetCenter){
-                        double bearing = Math.toDegrees(Math.atan2(72 -heading, 72 - heading));
-                        double rel = AngleUnit.normalizeDegrees(bearing - Math.toDegrees(heading));
-                        pollenTurretDrive.setTargetPosition((int) Math.round(clip(rel * (537.7 / 360) * 3.75, minTurretRot, maxTurretRot)));
+                        double bearing = Math.toDegrees(Math.atan2(70 - localizer.pose().x(), 70 - localizer.pose().y()));
+                        double rel = AngleUnit.normalizeDegrees(bearing - Math.toDegrees(localizer.pose().heading()));
+                        pollenTurretDrive.setTargetPosition((int) Math.round(Range.clip(rel * (537.7 / 360), minTurretRot, maxTurretRot)));
                     }
                     launcherVelocityTarget = 0;
                     pollenPID.reset();
@@ -233,7 +264,8 @@ public class TeleOp extends LinearOpMode {
                     //PID input for targeting
                     pollenPID.setSetPoint(0.0);
                     double correction = pollenPID.calculate(closestTag.getTargetXDegrees());
-                    pollenTurretDrive.setTargetPosition((int) Math.round(Range.clip(pollenTurretDrive.getCurrentPosition() + (correction * (537.7 / 360)), minTurretRot, maxTurretRot)));
+                    telemetry.addData("Correction: ", correction);
+                    pollenTurretDrive.setTargetPosition((int) Math.round(Range.clip(pollenTurretDrive.getCurrentPosition() + correction, minTurretRot, maxTurretRot)));
                 }
                 if(gamepad1.b){
                     launcherOn = true;
@@ -281,6 +313,7 @@ public class TeleOp extends LinearOpMode {
                 }
             }
 
+            /*
             if(gamepad1.dpadUpWasPressed() && hoodMax < 0.9){
                 hoodMax += 0.1;
                 hoodMin += 0.1;
@@ -298,7 +331,7 @@ public class TeleOp extends LinearOpMode {
                 launcherMinSpeed -= 200;
                 launcherMaxSpeed -= 200;
             }
-
+*/
             //Toggle intake
             if(gamepad1.right_bumper){
 
@@ -366,10 +399,11 @@ public class TeleOp extends LinearOpMode {
                 }
             }
 
-            //telemetry.addData("Pollen hood target: ", pollenTurretHood.getPosition());
-            //telemetry.addData("Pollen turret target: ", pollenTurretDrive.getTargetPosition());
-            //telemetry.addData("Pollen turret position: ", pollenTurretDrive.getCurrentPosition());
+            telemetry.addData("Pollen hood target: ", pollenTurretHood.getPosition());
+            telemetry.addData("Pollen turret target: ", pollenTurretDrive.getTargetPosition());
+            telemetry.addData("Pollen turret position: ", pollenTurretDrive.getCurrentPosition());
 
+            telemetry.addLine("Pose: " + localizer.pose().x() + ", " + localizer.pose().y() + ", " + Math.toDegrees(localizer.pose().heading()));
             telemetry.addLine("Pollen turret speed range: " + launcherMinSpeed + " to " + launcherMaxSpeed);
             telemetry.addLine("Pollen turret hood range: " + hoodMin + " to " + hoodMax);
             telemetry.update();

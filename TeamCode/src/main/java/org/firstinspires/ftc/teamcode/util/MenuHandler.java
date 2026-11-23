@@ -9,14 +9,11 @@ public class MenuHandler {
     private final Telemetry telemetry;
     private int currentMenuIdx = 0;
     private boolean unlocked = true;
-    private final MenuOption[] options = new MenuOption[] {
-      new MenuOption("Alliance", new String[] {"Blue", "Red"}),
-      new MenuOption("Starting position", new String[]{"Left Of Park", "Right Of Park"}),
-      new MenuOption("Auto Mode", new String[]{"Just Shoot", "Shoot Then Park", "Disabled"})
-    };
+    private final MenuOption[] options;
 
-    public MenuHandler(Telemetry tel){
+    public MenuHandler(Telemetry tel, MenuOption[] optionsIn){
         this.telemetry = tel;
+        options = optionsIn;
     }
 
     public void Redraw(){
@@ -26,10 +23,20 @@ public class MenuHandler {
         }
         for(int i = 0; i < options.length; i++){
             if(currentMenuIdx == i){
-                telemetry.addLine("> " + options[i].name + " : " + options[i].options[options[i].optionIdx]);
+                if(options[i].options != null){
+                    telemetry.addLine("> " + options[i].name + " : " + options[i].options[options[i].optionIdx]);
+                }
+                else{
+                    telemetry.addLine("> " + options[i].name + " : " + options[i].selectedNumber);
+                }
             }
             else{
-                telemetry.addLine("  " + options[i].name + " : " + options[i].options[options[i].optionIdx]);
+                if(options[i].options != null){
+                    telemetry.addLine("  " + options[i].name + " : " + options[i].options[options[i].optionIdx]);
+                }
+                else{
+                    telemetry.addLine("  " + options[i].name + " : " + options[i].selectedNumber);
+                }
             }
         }
     }
@@ -41,25 +48,22 @@ public class MenuHandler {
         if(currentMenuIdx >= options.length){
             currentMenuIdx = 0;
         }
-        else if(currentMenuIdx <= 0){
-            currentMenuIdx = options.length;
+        else if(currentMenuIdx < 0){
+            currentMenuIdx = options.length - 1;
         }
     }
 
-    public void EditCurrentSelection(){
+    public void EditCurrentSelection(int amount){
         if(!unlocked){
             return;
         }
-        options[currentMenuIdx].optionIdx++;
-        if(options[currentMenuIdx].optionIdx >= options[currentMenuIdx].options.length){
-            options[currentMenuIdx].optionIdx = 0;
-        }
+        options[currentMenuIdx].Change(amount);
     }
 
     public MenuOptionExport[] ExportSelections(){
         List<MenuOptionExport> exports = new ArrayList<MenuOptionExport>();
         for(int i = 0; i < options.length; i++){
-            exports.add(new MenuOptionExport(options[i].name, options[i].options[options[i].optionIdx]));
+            exports.add(options[i].Export());
         }
         return exports.toArray(new MenuOptionExport[0]);
     }
