@@ -31,7 +31,7 @@ public class OdometryTest extends OpMode {
     private Localizer localizer;
     private final PoseFactory poseFactory = PoseFactory.degrees();
 
-    private final Pose start = poseFactory.of(0, 0, 90);
+    private final Pose start = poseFactory.of(0, 0, 0);
 
 
 

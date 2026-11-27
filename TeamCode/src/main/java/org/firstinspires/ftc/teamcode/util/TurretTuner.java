@@ -13,6 +13,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.Range;
 import com.seattlesolvers.solverslib.controller.PIDController;
 
@@ -21,6 +22,8 @@ import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
 import org.firstinspires.ftc.teamcode.comp_opmodes.Auto;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 
+import java.sql.Time;
+import java.time.LocalTime;
 import java.util.List;
 
 @com.qualcomm.robotcore.eventloop.opmode.TeleOp(name = "Turret Tuner", group = "Tune")
@@ -52,7 +55,7 @@ public class TurretTuner extends LinearOpMode {
     final double maxTurretRot = 750;
     final double minTurretRot = -975;
 
-    final double launcherVelocityTolerance = 100;
+    final double launcherVelocityTolerance = 50;
     double launcherVelocityTarget = 0;
 
     Limelight3A limelight;
@@ -67,7 +70,7 @@ public class TurretTuner extends LinearOpMode {
     //PID controller for pollen
     PIDController pollenPID;
     boolean feedAllowed = true;
-
+    public double powerCompensation;
 
     @Override
     public void runOpMode(){
@@ -93,6 +96,7 @@ public class TurretTuner extends LinearOpMode {
         limelight.start();
 
         limelight.pipelineSwitch(0);
+        VoltageSensor ControlHubVoltageSensor = hardwareMap.get(VoltageSensor.class, "Control Hub");
 
         waitForStart();
 
@@ -104,22 +108,26 @@ public class TurretTuner extends LinearOpMode {
         //Predefine pollen hood position
         pollenTurretHood.setPosition(0.5);
 
+
         MenuHandler menu = new MenuHandler(telemetry, new MenuOption[]
                 {
                         new MenuOption("P", 0.5, 0, 15, 6),
                         new MenuOption("I", 0.05, 0, 15, 0.15),
                         new MenuOption("D", 0.05, 0, 15, 0.05),
                         new MenuOption("Turret Max Speed", 100, -2800, -500, -1600),
-                        new MenuOption("Turret Min Speed", 100, -2800, -500, -1800),
+                        new MenuOption("Turret Min Speed", 100, -2800, -500, -1500),
                         new MenuOption("Turret Hood Min", 0.05, 0, 1, 0.6),
                         new MenuOption("Turret Hood Max", 0.05, 0, 1, 0.8),
                         new MenuOption("Intake Speed", 0.1, 0, -1, -0.75),
                         new MenuOption("Feed Speed", 0.1, 0, -1, -0.8)
                 });
 
+
         //Main event loop
         while(opModeIsActive()){
             //dashboard.updateConfig();
+            powerCompensation = 13 / ControlHubVoltageSensor.getVoltage();
+
             menu.Redraw();
             if (gamepad1.dpadDownWasPressed() ) {
                 menu.ChangeSelection(1);
@@ -173,6 +181,8 @@ public class TurretTuner extends LinearOpMode {
                         closestTag = fiducial;
                     }
                 }
+
+
 
                 if (closestTag == null) {
                     launcherVelocityTarget = 0;
@@ -232,10 +242,10 @@ public class TurretTuner extends LinearOpMode {
 
 
             if(gamepad1.right_trigger_pressed & feedAllowed){
-                feedMotor.setPower(feedSpeed);
+                feedMotor.setPower(feedSpeed * powerCompensation);
             }
             else if(gamepad1.left_trigger_pressed){
-                feedMotor.setPower(-feedSpeed);
+                feedMotor.setPower(-feedSpeed * powerCompensation);
             }
             else{
                 feedMotor.setPower(0);
@@ -243,10 +253,10 @@ public class TurretTuner extends LinearOpMode {
 
             //Enable/Disable intake system
             if(intakeForwards){
-                intake.setPower(intakeSpeed);
+                intake.setPower(intakeSpeed * powerCompensation);
             }
             else if(intakeBackwards){
-                intake.setPower(-intakeSpeed);
+                intake.setPower(-intakeSpeed * powerCompensation);
             }
             else{
                 intake.setPower(0);
